@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Chat</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"/>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    html, body { 
+      height: 100%; 
+      margin: 0; 
+      background: #f8f9fa; 
+      overflow: hidden;
+    }
+    .container-fluid { 
+      height: 100%; 
+      display: flex; 
+      flex-direction: column; 
+      padding: 1rem;
+    }
+    .header-row { 
+      flex-shrink: 0; 
+      margin-bottom: 1rem;
+    }
+    .main-row { 
+      flex: 1; 
+      min-height: 0; 
+      display: flex; 
+      gap: 1rem;
+    }
+    .left-panel { 
+      width: 350px; 
+      display: flex; 
+      flex-direction: column; 
+      gap: 1rem; 
+      overflow-y: auto;
+    }
+    .right-panel { 
+      flex: 1; 
+      display: flex; 
+      flex-direction: column; 
+      min-width: 0;
+    }
+    .chat-box {
+      flex: 1;
+      overflow-y: auto;
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: .25rem;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    .msg { margin-bottom: .75rem; }
+    .bubble {
+      display: inline-block;
+      padding: .5rem .75rem;
+      border-radius: 1rem;
+      max-width: 75%;
+      word-wrap: break-word;
+      white-space: pre-wrap;
+    }
+    .bubble img {
+      max-width: 100%;
+      border-radius: .5rem;
+      margin-top: .5rem;
+    }
+    .user .bubble { background: #007bff; color: #fff; }
+    .bot .bubble { background: #f1f3f5; color: #212529; }
+    .system .bubble { 
+      background: #fff3cd; 
+      color: #856404; 
+      border: 1px solid #ffeaa7; 
+      font-size: 0.9rem; 
+    }
+    .error .bubble { 
+      background: #f8d7da; 
+      color: #721c24; 
+      border: 1px solid #f5c6cb; 
+    }
+    .api-settings, .user-files-section {
+      background: #fff;
+      border: 1px solid #e5e5e5;
+      border-radius: .25rem;
+      padding: 1rem;
+      flex-shrink: 0;
+    }
+    .provider-card {
+      border: 2px solid #dee2e6;
+      border-radius: .5rem;
+      padding: 0.75rem;
+      cursor: pointer;
+      transition: all 0.3s;
+      margin-bottom: 0.5rem;
+    }
+    .provider-card:hover { 
+      border-color: #007bff; 
+      background: #f8f9ff; 
+    }
+    .provider-card.active { 
+      border-color: #007bff; 
+      background: #e7f3ff; 
+    }
+    .provider-icon { font-size: 1.5rem; }
+    .api-key-section {
+      display: none;
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #f8f9fa;
+      border-radius: .25rem;
+    }
+    .api-key-section.show { display: block; }
+    .key-display {
+      font-family: monospace;
+      background: #fff;
+      padding: .5rem;
+      border: 1px solid #dee2e6;
+      border-radius: .25rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .key-display.empty { 
+      color: #6c757d; 
+      font-style: italic; 
+    }
+    .key-input-group { display: none; }
+    .key-input-group.editing { display: block; }
+    .model-selector {
+      margin-top: 1rem;
+      padding-top: 1rem;
+      border-top: 1px solid #dee2e6;
+    }
+    .feature-buttons {
+      margin-top: 1rem;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+    }
+    .file-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem;
+      border: 1px solid #e9ecef;
+      border-radius: .25rem;
+      margin-bottom: 0.5rem;
+      background: #f8f9fa;
+    }
+    .file-item:hover { background: #e9ecef; }
+    .file-icon { 
+      font-size: 1.2rem; 
+      margin-right: 0.5rem; 
+    }
+    .chat-input-form {
+      flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <div class="container-fluid">
+    <!-- Header -->
+    <div class="header-row d-flex justify-content-between align-items-center">
+      <h3 class="mb-0">💬 AI Chat</h3>
+      <div>
+        {% if current_user.role == 'Admin' %}
+          <a class="btn btn-outline-secondary btn-sm" href="/admin">Admin</a>
+        {% endif %}
+        <a class="btn btn-outline-secondary btn-sm" href="/">Home</a>
+        <a class="btn btn-outline-danger btn-sm" href="/logout">Logout</a>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-row">
+      <!-- Left Panel -->
+      <div class="left-panel">
+        <!-- User Files Section -->
+        <div class="user-files-section">
+          <h6 class="mb-3 font-weight-bold">📁 My Files</h6>
+          
+          <div class="mb-3">
+            <input type="file" id="chatFileInput" multiple style="display:none;" accept=".csv,.txt,.xlsx,.pdf">
+            <button class="btn btn-sm btn-primary btn-block" onclick="$('#chatFileInput').click()">
+              📤 Upload Files
+            </button>
+            <small class="form-text text-muted text-center">CSV, TXT, XLSX, PDF</small>
+          </div>
+
+          <div id="userFilesList" style="max-height:200px;overflow-y:auto;">
+            <p class="text-muted text-center small">No files uploaded yet</p>
+          </div>
+
+          <div class="mt-3">
+            <button class="btn btn-sm btn-warning btn-block" id="refreshFTSBtn">
+              🔄 Refresh Search Index
+            </button>
+          </div>
+        </div>
+
+        <!-- AI Provider Selection -->
+        <div class="api-settings">
+          <h6 class="mb-3 font-weight-bold">🤖 AI Provider</h6>
+          
+          <div class="provider-card active" data-provider="local">
+            <div class="d-flex align-items-center">
+              <div class="provider-icon mr-2">🔍</div>
+              <div>
+                <strong class="d-block" style="font-size:0.9rem;">Local Search</strong>
+                <small class="text-muted">Free • No API</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="provider-card" data-provider="openai">
+            <div class="d-flex align-items-center">
+              <div class="provider-icon mr-2">🧠</div>
+              <div>
+                <strong class="d-block" style="font-size:0.9rem;">OpenAI GPT</strong>
+                <small class="text-muted">Paid • Smart</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="provider-card" data-provider="groq">
+            <div class="d-flex align-items-center">
+              <div class="provider-icon mr-2">⚡</div>
+              <div>
+                <strong class="d-block" style="font-size:0.9rem;">Groq Llama</strong>
+                <small class="text-muted">Free tier</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="provider-card" data-provider="gemini">
+            <div class="d-flex align-items-center">
+              <div class="provider-icon mr-2">✨</div>
+              <div>
+                <strong class="d-block" style="font-size:0.9rem;">Google Gemini</strong>
+                <small class="text-muted">Free</small>
+              </div>
+            </div>
+          </div>
+
+          <!-- OpenAI Settings -->
+          <div id="openai-key-section" class="api-key-section">
+            <label class="font-weight-bold small">🔑 OpenAI API Key</label>
+            <div id="openai-display" class="key-display empty">
+              <span class="key-text small">No key saved</span>
+              <button class="btn btn-sm btn-outline-primary btn-edit" onclick="editKey('openai')">Edit</button>
+            </div>
+            <div id="openai-input" class="key-input-group">
+              <div class="input-group mb-2">
+                <input type="password" id="openaiKeyInput" class="form-control form-control-sm" placeholder="sk-proj-...">
+                <div class="input-group-append">
+                  <button class="btn btn-sm btn-outline-secondary" type="button" onclick="toggleVisibility('openaiKeyInput')">👁️</button>
+                </div>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-success btn-save" onclick="saveKey('openai')">💾 Save</button>
+                <button class="btn btn-sm btn-secondary btn-cancel ml-2" onclick="cancelEdit('openai')">Cancel</button>
+              </div>
+            </div>
+            <div class="model-selector">
+              <label class="font-weight-bold small">Model</label>
+              <select id="openaiModelSelect" class="form-control form-control-sm">
+                <option value="gpt-4o">GPT-4o</option>
+                <option value="gpt-4o-mini" selected>GPT-4o-mini ⭐</option>
+                <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                <option value="gpt-3.5-turbo">GPT-3.5</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Groq Settings -->
+          <div id="groq-key-section" class="api-key-section">
+            <label class="font-weight-bold small">🔑 Groq API Key</label>
+            <div id="groq-display" class="key-display empty">
+              <span class="key-text small">No key saved</span>
+              <button class="btn btn-sm btn-outline-primary btn-edit" onclick="editKey('groq')">Edit</button>
+            </div>
+            <div id="groq-input" class="key-input-group">
+              <div class="input-group mb-2">
+                <input type="password" id="groqKeyInput" class="form-control form-control-sm" placeholder="gsk_...">
+                <div class="input-group-append">
+                  <button class="btn btn-sm btn-outline-secondary" type="button" onclick="toggleVisibility('groqKeyInput')">👁️</button>
+                </div>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-success btn-save" onclick="saveKey('groq')">💾 Save</button>
+                <button class="btn btn-sm btn-secondary btn-cancel ml-2" onclick="cancelEdit('groq')">Cancel</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Gemini Settings -->
+          <div id="gemini-key-section" class="api-key-section">
+            <label class="font-weight-bold small">🔑 Gemini API Key</label>
+            <div id="gemini-display" class="key-display empty">
+              <span class="key-text small">No key saved</span>
+              <button class="btn btn-sm btn-outline-primary btn-edit" onclick="editKey('gemini')">Edit</button>
+            </div>
+            <div id="gemini-input" class="key-input-group">
+              <div class="input-group mb-2">
+                <input type="password" id="geminiKeyInput" class="form-control form-control-sm" placeholder="AIza...">
+                <div class="input-group-append">
+                  <button class="btn btn-sm btn-outline-secondary" type="button" onclick="toggleVisibility('geminiKeyInput')">👁️</button>
+                </div>
+              </div>
+              <div>
+                <button class="btn btn-sm btn-success btn-save" onclick="saveKey('gemini')">💾 Save</button>
+                <button class="btn btn-sm btn-secondary btn-cancel ml-2" onclick="cancelEdit('gemini')">Cancel</button>
+              </div>
+              <small class="form-text text-muted"><a href="https://aistudio.google.com/apikey" target="_blank">Get free key</a></small>
+            </div>
+            <div class="model-selector">
+              <label class="font-weight-bold small">Model</label>
+              <select id="geminiModelSelect" class="form-control form-control-sm">
+                <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash ⭐</option>
+                <option value="gemini-2.0-flash-exp">Gemini 2.0 Flash (Experimental)</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+                <option value="gemini-1.5-pro">Gemini 1.5 Pro</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Feature Buttons -->
+          <div class="feature-buttons" id="featureButtons" style="display:none;">
+            <button class="btn btn-sm btn-outline-primary" id="btnGenerateImage">🎨 Image</button>
+            <button class="btn btn-sm btn-outline-success" id="btnVisualize">📊 Chart</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Panel -->
+      <div class="right-panel">
+        <!-- Clear Chat Button -->
+        <div class="mb-2 text-right">
+          <button class="btn btn-sm btn-outline-danger" id="clearChatBtn">🗑️ Clear Chat</button>
+        </div>
+
+        <!-- Chat Box -->
+        <div id="chatBox" class="chat-box"></div>
+
+        <!-- Chat Input -->
+        <form id="chatForm" class="chat-input-form">
+          <div class="input-group">
+            <input id="msgInput" class="form-control" type="text" placeholder="Ask a question about your files..." autocomplete="off" required/>
+            <div class="input-group-append">
+              <button class="btn btn-primary" type="submit">
+                <span id="sendIcon">Send</span>
+              </button>
+            </div>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const roleName = "{{ current_user.role }}";
+    const $box = $("#chatBox");
+    let currentProvider = "local";
+    let savedKeys = {
+      openai: localStorage.getItem('openai_key') || '',
+      groq: localStorage.getItem('groq_key') || '',
+      gemini: localStorage.getItem('gemini_key') || ''
+    };
+    let selectedOpenAIModel = localStorage.getItem('openai_model') || 'gpt-4o-mini';
+    let selectedGeminiModel = localStorage.getItem('gemini_model') || 'gemini-2.5-flash';
+
+    $("#openaiModelSelect").val(selectedOpenAIModel);
+    $("#geminiModelSelect").val(selectedGeminiModel);
+
+    $("#openaiModelSelect").on("change", function(){
+      selectedOpenAIModel = $(this).val();
+      localStorage.setItem('openai_model', selectedOpenAIModel);
+      const modelName = $(this).find('option:selected').text().split(' (')[0];
+      add("system", `🎯 Switched to ${modelName}`);
+    });
+
+    $("#geminiModelSelect").on("change", function(){
+      selectedGeminiModel = $(this).val();
+      localStorage.setItem('gemini_model', selectedGeminiModel);
+      const modelName = $(this).find('option:selected').text().split(' (')[0];
+      add("system", `🎯 Switched to ${modelName}`);
+    });
+
+    // Clear Chat Button
+    $("#clearChatBtn").on("click", function(){
+      if(confirm("Clear all chat messages?")) {
+        $box.empty();
+        add("bot", `Chat cleared! 🧹\n\nI'm ready to help. Upload files and ask questions!`);
+      }
+    });
+
+    // Refresh FTS Button
+    $("#refreshFTSBtn").on("click", function(){
+      const $btn = $(this);
+      const originalText = $btn.html();
+      $btn.html('⏳ Refreshing...').prop('disabled', true);
+
+      $.ajax({
+        url: "/chat/fts/refresh",
+        method: "POST",
+        success: function(res){
+          $btn.html(originalText).prop('disabled', false);
+          
+          if(res.status === "success") {
+            const count = res.total || 0;
+            add("system", `✅ Search index refreshed! Indexed ${count} file(s).`);
+            
+            if(res.failed && res.failed.length > 0) {
+              add("error", `⚠️ Some files failed: ${res.failed.join(', ')}`);
+            }
+          } else {
+            add("error", `❌ Refresh failed: ${res.error}`);
+          }
+        },
+        error: function(xhr){
+          $btn.html(originalText).prop('disabled', false);
+          add("error", "❌ Refresh failed: " + (xhr.responseJSON?.error || "Unknown error"));
+        }
+      });
+    });
+
+    function getFileIcon(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      const icons = {'csv': '📊', 'txt': '📝', 'xlsx': '📗', 'xls': '📗', 'pdf': '📕'};
+      return icons[ext] || '📄';
+    }
+
+    function loadUserFiles() {
+      $.getJSON("/chat/files", function(res){
+        const $list = $("#userFilesList").empty();
+        const files = res.files || [];
+        
+        if (!files.length) {
+          $list.html('<p class="text-muted text-center small">No files uploaded yet</p>');
+          return;
+        }
+        
+        files.forEach(f => {
+          const icon = getFileIcon(f);
+          const $item = $(`
+            <div class="file-item">
+              <span><span class="file-icon">${icon}</span><small>${f}</small></span>
+              <div>
+                <button class="btn btn-xs btn-outline-info" title="Download">💾</button>
+                <button class="btn btn-xs btn-outline-danger ml-1" title="Delete">🗑️</button>
+              </div>
+            </div>
+          `);
+          
+          $item.find('.btn-outline-info').on('click', function(){
+            window.open(`/chat/download/${encodeURIComponent(f)}`, '_blank');
+          });
+          
+          $item.find('.btn-outline-danger').on('click', function(){
+            if(!confirm(`Delete ${f}?`)) return;
+            $.ajax({
+              url: `/chat/files/${encodeURIComponent(f)}`,
+              method: "DELETE",
+              success: function(){
+                loadUserFiles();
+                add("system", `🗑️ Deleted: ${f}`);
+              },
+              error: function(xhr){
+                add("error", "❌ Delete failed: " + (xhr.responseJSON?.error || "unknown"));
+              }
+            });
+          });
+          
+          $list.append($item);
+        });
+      });
+    }
+
+    $("#chatFileInput").on("change", function(){
+      const files = this.files;
+      if (!files.length) return;
+
+      const formData = new FormData();
+      for (let i = 0; i < files.length; i++) {
+        formData.append("files", files[i]);
+      }
+
+      add("system", `📤 Uploading ${files.length} file(s)...`);
+
+      $.ajax({
+        url: "/chat/upload",
+        method: "POST",
+        data: formData,
+        processData: false,
+        contentType: false,
+        success: function(res){
+          const saved = (res.saved || []).join(", ");
+          const skipped = (res.skipped || []).join(", ");
+          
+          if(saved) add("system", `✅ Uploaded: ${saved}`);
+          if(skipped) add("error", `⚠️ Skipped: ${skipped}`);
+          
+          loadUserFiles();
+          $("#chatFileInput").val('');
+        },
+        error: function(xhr){
+          add("error", "❌ Upload failed: " + (xhr.responseJSON?.error || "unknown"));
+        }
+      });
+    });
+
+    function getProviderName() {
+      if (currentProvider === "local") return "Local Search";
+      if (currentProvider === "openai") {
+        const modelName = $("#openaiModelSelect option:selected").text().split(' ')[0] + " " + $("#openaiModelSelect option:selected").text().split(' ')[1];
+        return `OpenAI ${modelName}`;
+      }
+      if (currentProvider === "groq") return "Groq Llama 3.3";
+      if (currentProvider === "gemini") {
+        const modelName = $("#geminiModelSelect option:selected").text().split(' (')[0];
+        return modelName;
+      }
+      return currentProvider;
+    }
+
+    function updateKeyDisplay(provider) {
+      const key = savedKeys[provider];
+      const $display = $(`#${provider}-display`);
+      const $text = $display.find('.key-text');
+      
+      if (key && key.length > 0) {
+        const masked = key.substring(0, 6) + '•'.repeat(Math.min(15, key.length - 6));
+        $text.text(masked);
+        $display.removeClass('empty');
+      } else {
+        $text.text('No key saved');
+        $display.addClass('empty');
+      }
+    }
+
+    window.editKey = function(provider) {
+      $(`#${provider}-display`).hide();
+      $(`#${provider}-input`).addClass('editing');
+      $(`#${provider}KeyInput`).val(savedKeys[provider]).focus();
+    };
+
+    window.saveKey = function(provider) {
+      const newKey = $(`#${provider}KeyInput`).val().trim();
+      savedKeys[provider] = newKey;
+      localStorage.setItem(`${provider}_key`, newKey);
+      
+      $(`#${provider}-input`).removeClass('editing');
+      $(`#${provider}-display`).show();
+      updateKeyDisplay(provider);
+      
+      add("system", `✅ ${provider.toUpperCase()} API key saved!`);
+    };
+
+    window.cancelEdit = function(provider) {
+      $(`#${provider}-input`).removeClass('editing');
+      $(`#${provider}-display`).show();
+      $(`#${provider}KeyInput`).val(savedKeys[provider]);
+    };
+
+    window.toggleVisibility = function(inputId) {
+      const $input = $(`#${inputId}`);
+      $input.attr('type', $input.attr('type') === 'password' ? 'text' : 'password');
+    };
+
+    updateKeyDisplay('openai');
+    updateKeyDisplay('groq');
+    updateKeyDisplay('gemini');
+
+    function add(who, text, html){
+      const row = $(`<div class="msg ${who}"><div class="bubble"></div></div>`);
+      if(html) {
+        row.find(".bubble").html(text);
+      } else {
+        row.find(".bubble").text(text);
+      }
+      $box.append(row);
+      $box.scrollTop($box.prop("scrollHeight"));
+    }
+
+    $(".provider-card").on("click", function(){
+      const newProvider = $(this).data("provider");
+      if (newProvider === currentProvider) return;
+
+      $(".provider-card").removeClass("active");
+      $(this).addClass("active");
+      currentProvider = newProvider;
+      
+      const newProviderName = getProviderName();
+      
+      $(".api-key-section").removeClass("show");
+      
+      if(currentProvider === "openai"){
+        $("#openai-key-section").addClass("show");
+        $("#featureButtons").show();
+      } else if(currentProvider === "groq"){
+        $("#groq-key-section").addClass("show");
+        $("#featureButtons").hide();
+      } else if(currentProvider === "gemini"){
+        $("#gemini-key-section").addClass("show");
+        $("#featureButtons").hide();
+      } else {
+        $("#featureButtons").hide();
+      }
+
+      add("system", `🔄 Switched to ${newProviderName}`);
+    });
+
+    $(function(){
+      add("bot", `Hello ${roleName}! 👋\n\nI can help you analyze your files. Here's what you can do:\n\n📤 Upload files (CSV, Excel, PDF, TXT)\n🔍 Ask questions about your data\n🎨 Generate images (OpenAI)\n📊 Create visualizations\n\nUpload a file to get started!`);
+      loadUserFiles();
+    });
+
+    $("#chatForm").on("submit", function(e){
+      e.preventDefault();
+      const text = $("#msgInput").val().trim();
+      if(!text) return;
+
+      let apiKey = "";
+      let model = "";
+      
+      if(currentProvider === "openai"){
+        apiKey = savedKeys.openai;
+        model = selectedOpenAIModel;
+      } else if(currentProvider === "groq"){
+        apiKey = savedKeys.groq;
+      } else if(currentProvider === "gemini"){
+        apiKey = savedKeys.gemini;
+        model = selectedGeminiModel;
+      }
+
+      add("user", text);
+      $("#msgInput").val("");
+      
+      const typingId = "typing-" + Date.now();
+      add("bot", currentProvider === "local" ? "🔍 Searching..." : "🤔 Thinking...");
+      $(".msg.bot:last").attr("id", typingId);
+      $("#sendIcon").text("⏳");
+
+      $.ajax({
+        url: "/chat/send",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ 
+          message: text,
+          ai_provider: currentProvider,
+          api_key: apiKey,
+          model: model
+        }),
+        success: function(res){
+          $("#" + typingId).remove();
+          $("#sendIcon").text("Send");
+          
+          add("bot", res.reply || "(no reply)");
+          
+          if(currentProvider !== "local" && res.sources && res.sources.length > 0){
+            let sourcesText = "\n📚 Sources:\n";
+            res.sources.forEach(function(s, i){
+              sourcesText += `${i+1}. ${s.file.replace(/^user_\d+_files\//, '')} (row ${s.row})\n`;
+            });
+            add("bot", sourcesText);
+          }
+        },
+        error: function(xhr){
+          $("#" + typingId).remove();
+          $("#sendIcon").text("Send");
+          
+          const errorMsg = xhr.responseJSON?.error || xhr.statusText || "Error occurred";
+          add("error", "❌ " + errorMsg);
+          
+          if(errorMsg.includes("API key")){
+            add("system", "💡 Tip: Click 'Edit' to add your API key, or use Local Search (free).");
+          }
+        }
+      });
+    });
+
+    $("#btnGenerateImage").on("click", function(){
+      const prompt = window.prompt("Enter image prompt:");
+      if(!prompt) return;
+
+      add("user", `🎨 Generate: ${prompt}`);
+      add("bot", "🎨 Generating...");
+      const loadingId = "loading-" + Date.now();
+      $(".msg.bot:last").attr("id", loadingId);
+
+      $.ajax({
+        url: "/generate-image",
+        method: "POST",
+        contentType: "application/json",
+        data: JSON.stringify({ 
+          prompt: prompt,
+          api_key: savedKeys.openai
+        }),
+        success: function(res){
+          $("#" + loadingId).remove();
+          add("bot", `<img src="${res.image_url}" alt="Generated">`, true);
+        },
+        error: function(xhr){
+          $("#" + loadingId).remove();
+          add("error", "❌ " + (xhr.responseJSON?.error || "Failed"));
+        }
+      });
+    });
+
+    $("#btnVisualize").on("click", function(){
+      $.getJSON("/chat/files", function(res){
+        const files = (res.files || []).filter(f => f.endsWith('.csv') || f.endsWith('.xlsx'));
+        
+        if(!files.length){
+          add("error", "❌ No CSV/XLSX files to visualize. Upload one first!");
+          return;
+        }
+
+        const filename = files[0];
+        const chartType = window.prompt("Chart type?\nbar / line / pie / scatter", "bar");
+        if(!chartType) return;
+
+        add("user", `📊 Visualize: ${filename} (${chartType})`);
+        add("bot", "📊 Creating chart...");
+        const loadingId = "loading-" + Date.now();
+        $(".msg.bot:last").attr("id", loadingId);
+
+        const userFolder = "user_{{ current_user.id }}_files";
+        const fullPath = `${userFolder}/${filename}`;
+
+        $.ajax({
+          url: "/visualize",
+          method: "POST",
+          contentType: "application/json",
+          data: JSON.stringify({ 
+            filename: fullPath,
+            chart_type: chartType
+          }),
+          success: function(res){
+            $("#" + loadingId).remove();
+            add("bot", `<img src="${res.image}" alt="Chart">`, true);
+          },
+          error: function(xhr){
+            $("#" + loadingId).remove();
+            add("error", "❌ " + (xhr.responseJSON?.error || "Failed"));
+          }
+        });
+      });
+    });
+  </script>
+</body>
+</html>

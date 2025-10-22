@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>User Management</title>
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+<body>
+  <div class="container mt-4">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>User Management System</h2>
+      <div>
+        {% if current_user.role in ['Admin'] %}
+          <a href="/admin" class="btn btn-outline-secondary btn-sm">Admin</a>
+        {% endif %}
+        <a href="/chat" class="btn btn-outline-secondary btn-sm">Chat</a>
+        <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+      </div>
+    </div>
+
+    {% if current_user.role in ['Admin'] %}
+    <div id="userForm" class="mb-4">
+      <h4>Add New User</h4>
+      <form id="userForm">
+        <div class="form-group">
+          <label for="name">Name:</label>
+          <input type="text" class="form-control" id="name" required>
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email:</label>
+          <input type="email" class="form-control" id="email" required>
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password:</label>
+          <input type="text" class="form-control" id="password" value="test123" required>
+        </div>
+
+        <div class="form-group">
+          <label for="role">Role:</label>
+          <select class="form-control" id="role" required>
+            <option value="">-- Select Role --</option>
+            <option value="Admin">Admin</option>
+            <option value="Customer">Customer</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Add User</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <hr>
+
+    <h4>All Users</h4>
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          {% if current_user.role in ['Admin'] %}
+          <th>Email</th>
+          {% endif %}
+          <th>Role</th>
+          {% if current_user.role in ['Admin'] %}
+          <th>Actions</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody id="userTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    $(document).ready(function () {
+      
+      function loadUsers() {
+        $.ajax({
+          url: '/users',
+          type: 'GET',
+          success: function (users) {
+            let rows = "";
+            users.forEach(function (user) {
+              rows += `<tr>
+                         <td>${user.id}</td>
+                         <td>${user.name}</td>`;
+              
+              if ('email' in user) {
+                rows += `<td>${user.email}</td>`;
+              }
+              
+              rows += `<td>${user.role}</td>`;
+              
+              if ('email' in user) {
+                rows += `<td>
+                           <button class="btn btn-danger btn-sm" onclick="deleteUser(${user.id})">Delete</button>
+                         </td>`;
+              }
+              
+              rows += `</tr>`;
+            });
+            
+            $("#userTable").html(rows);
+          },
+          error: function (xhr) {
+            console.log('Error:', xhr.responseText);
+          }
+        });
+      }
+
+      window.deleteUser = function (id) {
+        $.ajax({
+          url: `/user/${id}`,
+          type: 'DELETE',
+          success: function () {
+            loadUsers();
+          },
+          error: function (xhr) {
+            console.log('Error:', xhr.responseText);
+          }
+        });
+      };
+
+      $("#userForm").submit(function (event) {
+        event.preventDefault();
+        
+        const formData = {
+          name: $('#name').val(),
+          email: $('#email').val(),
+          password: $('#password').val(),
+          role: $('#role').val()
+        };
+
+        $.ajax({
+          type: 'POST',
+          url: '/user',
+          contentType: 'application/json',
+          data: JSON.stringify(formData),
+          success: function (response) {
+            console.log('User Added:', response);
+            loadUsers();
+            $('#userForm')[0].reset();
+          },
+          error: function (xhr) {
+            console.log('Error:', xhr.responseText);
+          }
+        });
+      });
+
+      loadUsers();
+    });
+  </script>
+
+</body>
+</html>

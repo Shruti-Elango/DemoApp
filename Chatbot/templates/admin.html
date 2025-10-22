@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Admin · Datasets</title>
+  <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"/>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <style>
+    body { background: #f8f9fa; }
+    .file-item { transition: background-color 0.2s; }
+    .file-item:hover { background-color: #e9ecef; }
+    .badge-admin { background-color: #17a2b8; }
+    .badge-user { background-color: #6c757d; }
+    .file-size { font-size: 0.85rem; color: #6c757d; }
+  </style>
+</head>
+<body>
+  <div class="container py-4">
+    
+    <!-- Navigation -->
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h3 class="mb-0">Admin — File Management</h3>
+      <div>
+        <button class="btn btn-warning btn-sm" id="rebuildFTSBtn">🔧 Rebuild Search Index</button>
+        <a class="btn btn-outline-secondary btn-sm" href="/">Home</a>
+        <a class="btn btn-outline-secondary btn-sm" href="/chat">Open Chat</a>
+        <a class="btn btn-outline-danger btn-sm" href="/logout">Logout</a>
+      </div>
+    </div>
+
+    <!-- Upload Card -->
+    <div class="card mb-4">
+      <div class="card-body">
+        <h5 class="card-title">📤 Upload Admin Files</h5>
+        <p class="text-muted small">Files uploaded here are accessible to all users</p>
+        <form id="uploadForm">
+          <div class="form-group">
+            <input type="file" id="fileInput" class="form-control" multiple />
+            <small class="form-text text-muted">
+              Supported formats: <strong>CSV</strong>, <strong>TXT</strong>, <strong>XLSX</strong>, <strong>PDF</strong>
+            </small>
+          </div>
+          <button class="btn btn-primary" type="submit">Upload</button>
+        </form>
+
+        <div id="result" class="mt-3" style="display:none;">
+          <div class="alert alert-info mb-2" id="saved"></div>
+          <div class="alert alert-warning mb-0" id="skipped"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- All Files Card -->
+    <div class="card">
+      <div class="card-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <div>
+            <h5 class="card-title mb-1">📁 All Files</h5>
+            <p class="text-muted small mb-0">Admin files + User uploads</p>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary" id="refreshBtn" type="button">🔄 Refresh</button>
+        </div>
+        
+        <!-- Filter Tabs -->
+        <ul class="nav nav-tabs mb-3" id="filterTabs">
+          <li class="nav-item">
+            <a class="nav-link active" href="#" data-filter="all">All Files</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#" data-filter="admin">Admin Only</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" href="#" data-filter="user">User Files Only</a>
+          </li>
+        </ul>
+
+        <!-- File Count -->
+        <div id="fileCount" class="mb-2 text-muted small"></div>
+
+        <!-- Files Table -->
+        <div class="table-responsive">
+          <table class="table table-hover table-sm">
+            <thead class="thead-light">
+              <tr>
+                <th style="width: 5%;">Type</th>
+                <th style="width: 35%;">File Name</th>
+                <th style="width: 20%;">Owner</th>
+                <th style="width: 15%;">Size</th>
+                <th style="width: 25%;">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="fileList">
+              <tr>
+                <td colspan="5" class="text-center text-muted">Loading...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allFilesData = [];
+    let currentFilter = 'all';
+
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 Bytes';
+      const k = 1024;
+      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    function getFileIcon(filename) {
+      const ext = filename.split('.').pop().toLowerCase();
+      const icons = {'csv': '📊', 'txt': '📝', 'xlsx': '📗', 'xls': '📗', 'pdf': '📕'};
+      return icons[ext] || '📄';
+    }
+
+    // Rebuild FTS Index
+    $("#rebuildFTSBtn").on("click", function(){
+      if(!confirm("Rebuild entire search index?\n\nThis will:\n- Clear all indexed data\n- Re-index all files\n- Take a few seconds\n\nContinue?")) {
+        return;
+      }
+
+      const $btn = $(this);
+      const originalText = $btn.html();
+      $btn.html('⏳ Rebuilding...').prop('disabled', true);
+
+      $.ajax({
+        url: "/admin/fts/rebuild",
+        method: "POST",
+        success: function(res){
+          $btn.html(originalText).prop('disabled', false);
+          
+          if(res.status === "success") {
+            const count = res.total || 0;
+            alert(`✅ Search index rebuilt!\n\nIndexed: ${count} file(s)\nFailed: ${res.failed.length}`);
+            
+            if(res.failed && res.failed.length > 0) {
+              console.error("Failed files:", res.failed);
+            }
+          } else {
+            alert(`❌ Rebuild failed: ${res.error}`);
+          }
+        },
+        error: function(xhr){
+          $btn.html(originalText).prop('disabled', false);
+          alert("❌ Rebuild failed: " + (xhr.responseJSON?.error || "Unknown error"));
+        }
+      });
+    });
+
+    function loadFiles(){
+      $.getJSON("/admin/files", function(res){
+        allFilesData = res.files || [];
+        renderFiles();
+      })
+      .fail(function(xhr){
+        $("#fileList").html(`
+          <tr>
+            <td colspan="5" class="text-center text-danger">
+              ❌ ${xhr.responseJSON?.error || xhr.statusText || "Failed to load files"}
+            </td>
+          </tr>
+        `);
+      });
+    }
+
+    function renderFiles() {
+      const $list = $("#fileList").empty();
+      
+      // Filter files based on current filter
+      let filteredFiles = allFilesData;
+      if (currentFilter === 'admin') {
+        filteredFiles = allFilesData.filter(f => f.type === 'admin');
+      } else if (currentFilter === 'user') {
+        filteredFiles = allFilesData.filter(f => f.type === 'user');
+      }
+
+      // Update count
+      $("#fileCount").text(`Showing ${filteredFiles.length} of ${allFilesData.length} files`);
+      
+      if (!filteredFiles.length) {
+        $list.html(`
+          <tr>
+            <td colspan="5" class="text-center text-muted">No files found</td>
+          </tr>
+        `);
+        return;
+      }
+      
+      filteredFiles.forEach(file => {
+        const icon = getFileIcon(file.name);
+        const badgeClass = file.type === 'admin' ? 'badge-admin' : 'badge-user';
+        const badgeText = file.type === 'admin' ? 'ADMIN' : 'USER';
+        
+        const row = $(`
+          <tr class="file-item">
+            <td><span class="badge ${badgeClass}">${badgeText}</span></td>
+            <td>
+              <span style="font-size:1.2rem;">${icon}</span>
+              <strong>${file.name}</strong>
+            </td>
+            <td>${file.owner}</td>
+            <td class="file-size">${formatFileSize(file.size)}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-danger btn-delete" data-path="${file.path}" data-name="${file.name}">
+                🗑️ Delete
+              </button>
+            </td>
+          </tr>
+        `);
+        
+        $list.append(row);
+      });
+
+      // Attach delete handlers
+      $(".btn-delete").on("click", function(){
+        const filepath = $(this).data("path");
+        const filename = $(this).data("name");
+        
+        if(!confirm(`Delete "${filename}"?\n\nThis will:\n- Remove the file from disk\n- Clear it from search index\n- Cannot be undone`)) {
+          return;
+        }
+        
+        $.ajax({
+          url: "/admin/files/" + encodeURIComponent(filepath),
+          method: "DELETE",
+          success: function(response){ 
+            console.log("Delete success:", response);
+            loadFiles();
+            
+            // Show success message
+            const tempAlert = $(`
+              <div class="alert alert-success alert-dismissible fade show position-fixed" 
+                   style="top: 20px; right: 20px; z-index: 9999;">
+                ✅ Deleted: ${filename}
+                <button type="button" class="close" data-dismiss="alert">&times;</button>
+              </div>
+            `);
+            $("body").append(tempAlert);
+            setTimeout(() => tempAlert.alert('close'), 3000);
+          },
+          error: function(xhr){
+            console.error("Delete error:", xhr);
+            alert("❌ Delete failed: " + (xhr.responseJSON?.error || xhr.statusText || "Unknown error"));
+          }
+        });
+      });
+    }
+
+    // Upload form handler
+    $("#uploadForm").on("submit", function(e){
+      e.preventDefault();
+      const files = $("#fileInput")[0].files;
+      
+      if (!files.length) { 
+        alert("Choose at least one file."); 
+        return;
+      }
+
+      const form = new FormData();
+      for (let i=0; i<files.length; i++) 
+        form.append("files", files[i]);
+
+      $.ajax({
+        url: "/upload",
+        method: "POST",
+        data: form,
+        processData: false,
+        contentType: false,
+        success: function(res){
+          $("#result").show();
+          const saved = (res.saved||[]).join(", ");
+          const skipped = (res.skipped||[]).join(", ");
+          
+          $("#saved").toggle(!!saved).text(saved ? "✅ Saved: " + saved : "");
+          $("#skipped").toggle(!!skipped).text(skipped ? "⚠️ Skipped: " + skipped : "");
+          
+          loadFiles();
+          $("#fileInput").val("");
+        },
+        error: function(xhr){
+          alert(xhr.responseJSON?.error || xhr.statusText || "Upload failed");
+        }
+      });
+    });
+
+    // Filter tabs
+    $("#filterTabs a").on("click", function(e){
+      e.preventDefault();
+      $("#filterTabs a").removeClass("active");
+      $(this).addClass("active");
+      currentFilter = $(this).data("filter");
+      renderFiles();
+    });
+
+    // Refresh button
+    $("#refreshBtn").on("click", loadFiles);
+
+    // Load on page load
+    $(loadFiles);
+  </script>
+</body>
+</html>
