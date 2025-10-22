@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>User Management</title>
+  <link href="https://maxcdn.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css" rel="stylesheet" />
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+</head>
+
+<body>
+  <div class="container mt-4">
+    <!-- Header with Logout -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+      <h2>User Management System</h2>
+      <a href="/logout" class="btn btn-outline-danger btn-sm">Logout</a>
+    </div>
+
+    <!-- Add User Form: Only visible to Admins -->
+    {% if current_user.role in ['Admin'] %}
+    <div id="addUserCard" class="mb-4">
+      <h4>Add New User</h4>
+      <form id="addUserForm" autocomplete="off">
+        {# If using Flask-WTF, include CSRF: {{ form.csrf_token }} #}
+        <div class="form-group">
+          <label for="name">Name:</label>
+          <input type="text" class="form-control" id="name" required />
+        </div>
+
+        <div class="form-group">
+          <label for="email">Email:</label>
+          <input type="email" class="form-control" id="email" required />
+        </div>
+
+        <div class="form-group">
+          <label for="password">Password:</label>
+          <input type="password" class="form-control" id="password" required />
+        </div>
+
+        <div class="form-group">
+          <label for="role">Role:</label>
+          <select class="form-control" id="role" required>
+            <option value="">-- Select Role --</option>
+            <option value="Admin">Admin</option>
+            <option value="Customer">Customer</option>
+          </select>
+        </div>
+
+        <button type="submit" class="btn btn-primary">Add User</button>
+      </form>
+    </div>
+    {% endif %}
+
+    <hr />
+
+    <h4>All Users</h4>
+    <table class="table table-bordered">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          {% if current_user.role in ['Admin'] %}
+          <th>Email</th>
+          {% endif %}
+          <th>Role</th>
+          {% if current_user.role in ['Admin'] %}
+          <th>Actions</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody id="userTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    $(function () {
+      // Minimal HTML-escape helper to reduce XSS risk when injecting into the table
+      const esc = (s) => String(s)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+
+      function loadUsers() {
+        $.ajax({
+          url: '/users',
+          type: 'GET',
+          success: function (users) {
+            let rows = "";
+            users.forEach(function (user) {
+              rows += `<tr>
+                <td>${esc(user.id)}</td>
+                <td>${esc(user.name)}</td>`;
+              if ('email' in user) {
+                rows += `<td>${esc(user.email)}</td>`;
+              }
+              rows += `<td>${esc(user.role)}</td>`;
+              if ('email' in user) {
+                rows += `<td>
+                  <button class="btn btn-danger btn-sm" data-id="${esc(user.id)}">Delete</button>
+                </td>`;
+              }
+              rows += `</tr>`;
+            });
+            $("#userTable").html(rows);
+          },
+          error: function (xhr) {
+            console.log('Error:', xhr.responseText);
+          }
+        });
+      }
+
+      // Delegate delete clicks (works for dynamically added rows)
+      $(document).on('click', 'button.btn-danger[data-id]', function () {
+        const id = $(this).data('id');
+        $.ajax({
+          url: `/user/${id}`,
+          type: 'DELETE',
+          success: function () {
+            loadUsers();
+          },
+          error: function (xhr) {
+            console.log('Error:', xhr.responseText);
+          }
+        });
+      });
+
+      // Handle form submission (admin only)
+      $('#addUserForm').on('submit', function (event) {
+        event.preventDefault();
+        const formData = {
+          name: $('#name').val().trim(),
+          email: $('#email').val().trim(),
+          password: $('#password').val(),
+          role: $('#role').val()
+        };
+
+        $.ajax({
+          type: 'POST',
+          url: '/user',
+          contentType: 'application/json',
+          data: JSON.stringify(formData),
+          success: function () {
+            $('#addUserForm')[0].reset();
+            loadUsers();
+          },
+          error: function (xhr) {
+            console.log('Error:', xhr.responseText);
+          }
+        });
+      });
+
+      // Initial load
+      loadUsers();
+    });
+  </script>
+</body>
+</html>
