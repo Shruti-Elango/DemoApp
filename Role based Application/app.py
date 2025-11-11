@@ -18,7 +18,7 @@ app.secret_key = 'your_secret_key'  # TODO: use an environment variable in produ
 # ========================
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = 'MYSQL54321!'   # TODO: env var in production
+app.config['MYSQL_PASSWORD'] = 'ENTERPASSWORD'   # CHANGE TO YOUR PASSWORD
 app.config['MYSQL_DB'] = 'user_management'
 app.config['MYSQL_CURSORCLASS'] = 'DictCursor'  # return dict rows
 mysql = MySQL(app)
@@ -170,3 +170,4 @@ def delete_user(id):
 # ========================
 if __name__ == '__main__':
     app.run(debug=True)
+
