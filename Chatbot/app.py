@@ -374,7 +374,7 @@ def ask_ai_with_context(user_question: str, search_results: list, ai_provider: s
 
 app.config['MYSQL_HOST'] = os.getenv('MYSQL_HOST', 'localhost')
 app.config['MYSQL_USER'] = os.getenv('MYSQL_USER', 'root')
-app.config['MYSQL_PASSWORD'] = os.getenv('MYSQL_PASSWORD', 'MYSQL54321!')  # ⚠️ CHANGE THIS!
+app.config['MYSQL_PASSWORD'] = os.getenv('MYSQL_PASSWORD', 'ENTER_PASSWORD')  # ⚠️ CHANGE THIS!
 app.config['MYSQL_DB'] = os.getenv('MYSQL_DB', 'user_management')
 mysql = MySQL(app)
 
@@ -990,3 +990,4 @@ if __name__ == '__main__':
     
     
            
+
